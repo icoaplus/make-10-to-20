@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
-    <title>10〜20をつくろう！タイムゲーム</title>
+    <title>5〜20をつくろう！タイムゲーム</title>
     <style>
       :root {
         --ink: #24304a;
@@ -419,6 +419,25 @@
         background: #edf7f9;
         font-weight: 800;
       }
+      .record-chart {
+        margin: 14px 0 10px;
+        padding: 12px 10px 6px;
+        border: 2px solid #cce9f3;
+        border-radius: 14px;
+        background: #f7fdff;
+      }
+      .record-chart h3 {
+        margin: 0 0 4px;
+        color: #277ea7;
+        text-align: center;
+        font-size: 1rem;
+      }
+      .record-chart svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        overflow: visible;
+      }
       .records {
         padding: 0;
         list-style: none;
@@ -813,6 +832,7 @@
         <h2 id="recordTitle">きろく</h2>
         <p id="recordTarget" class="recordTarget"></p>
         <div id="summary" class="summary"></div>
+        <div id="recordChart" class="record-chart hidden"></div>
         <ol id="records" class="records"></ol>
         <p id="empty" class="empty">まだ記録がありません。</p>
       </section>
@@ -924,7 +944,7 @@
           players = JSON.parse(localStorage.getItem(STORE) || "[]");
           selectedId = localStorage.getItem(SEL) || players[0]?.id || "";
         } catch {}
-        for (let n = 10; n <= 20; n++) {
+        for (let n = 5; n <= 20; n++) {
           const o = document.createElement("option");
           o.value = n;
           o.textContent = n;
@@ -933,12 +953,16 @@
         renderAll();
       }
       function shuffle() {
-        const a = Array.from({ length: target }, (_, i) => i);
-        for (let i = a.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [a[i], a[j]] = [a[j], a[i]];
+        const result = [];
+        while (result.length < 10) {
+          const choices = Array.from({ length: target }, (_, i) => i);
+          for (let i = choices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [choices[i], choices[j]] = [choices[j], choices[i]];
+          }
+          result.push(...choices);
         }
-        return a.slice(0, 10);
+        return result.slice(0, 10);
       }
       function start() {
         if (!selected()) {
@@ -1084,12 +1108,11 @@
         $("timer").textContent = `⏱ ${fmt(elapsed)}`;
         const active = screen === "playing" || screen === "paused";
         $("count").textContent = active ? `${index + 1} / 10` : "10もん";
-        $("progress").style.width =
-          active
-            ? `${index * 10}%`
-            : screen === "finished"
-              ? "100%"
-              : "0%";
+        $("progress").style.width = active
+          ? `${index * 10}%`
+          : screen === "finished"
+            ? "100%"
+            : "0%";
         $("left").textContent = active
           ? questions[index]
           : Math.max(0, target - 8);
@@ -1150,6 +1173,7 @@
         $("recordTarget").textContent = `合計 ${target} のきろく`;
         $("summary").innerHTML =
           `<span>ちょうせん：${rs.length}回</span><span>ベスト：${best() === null ? "―" : fmt(best())}</span>`;
+        renderChart(rs);
         $("empty").classList.toggle("hidden", rs.length > 0);
         $("records").innerHTML = rs
           .slice(-10)
@@ -1159,6 +1183,55 @@
               `<li><span>${new Date(r.date).toLocaleDateString("ja-JP")}</span><b>${fmt(r.time)}</b><small>まちがい ${r.mistakes}回</small></li>`,
           )
           .join("");
+      }
+      function renderChart(records) {
+        const area = $("recordChart");
+        const data = records.slice(-10);
+        area.classList.toggle("hidden", data.length === 0);
+        if (!data.length) {
+          area.innerHTML = "";
+          return;
+        }
+
+        const width = 640,
+          height = 240,
+          left = 58,
+          right = 18,
+          top = 32,
+          bottom = 40,
+          chartWidth = width - left - right,
+          chartHeight = height - top - bottom;
+        const times = data.map((r) => Number(r.time));
+        const low = Math.min(...times),
+          high = Math.max(...times),
+          padding = Math.max((high - low) * 0.18, 0.5),
+          minY = Math.max(0, low - padding),
+          maxY = high + padding,
+          range = Math.max(maxY - minY, 1);
+        const x = (i) =>
+          data.length === 1
+            ? left + chartWidth / 2
+            : left + (i * chartWidth) / Math.max(data.length - 1, 1);
+        const y = (value) => top + ((maxY - value) / range) * chartHeight;
+        const points = times.map((value, i) => `${x(i)},${y(value)}`).join(" ");
+        const firstTry = records.length - data.length + 1;
+
+        const guides = [0, 0.5, 1]
+          .map((ratio) => {
+            const gy = top + ratio * chartHeight;
+            const value = maxY - ratio * range;
+            return `<line x1="${left}" y1="${gy}" x2="${width - right}" y2="${gy}" stroke="#cfe1e7" stroke-width="1"/><text x="${left - 8}" y="${gy + 4}" text-anchor="end" fill="#637987" font-size="12">${value.toFixed(1)}秒</text>`;
+          })
+          .join("");
+        const dots = times
+          .map((value, i) => {
+            const px = x(i),
+              py = y(value);
+            return `<circle cx="${px}" cy="${py}" r="6" fill="#f05c5c" stroke="#fff" stroke-width="3"/><text x="${px}" y="${Math.max(15, py - 11)}" text-anchor="middle" fill="#33425a" font-size="12" font-weight="800">${value.toFixed(2)}</text><text x="${px}" y="${height - 14}" text-anchor="middle" fill="#637987" font-size="12">${firstTry + i}回</text>`;
+          })
+          .join("");
+
+        area.innerHTML = `<h3>タイムの変化（直近10回）</h3><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="挑戦ごとのタイムを示す折れ線グラフ">${guides}<line x1="${left}" y1="${top}" x2="${left}" y2="${height - bottom}" stroke="#8fa9b4" stroke-width="2"/><line x1="${left}" y1="${height - bottom}" x2="${width - right}" y2="${height - bottom}" stroke="#8fa9b4" stroke-width="2"/><polyline points="${points}" fill="none" stroke="#208ab8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>${dots}</svg>`;
       }
       function renderAll() {
         renderHeader();
